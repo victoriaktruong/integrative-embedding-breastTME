@@ -31,7 +31,7 @@ Contains all scripts used to generate embeddings, perform clustering, identify m
 ---
 
 ### `figures/`  
-Visual outputs including UMAP plots and project diagram.
+Visualizations including UMAP plots and project diagram.
 
 ---
 
