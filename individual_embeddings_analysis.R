@@ -1,4 +1,4 @@
-# ---- Load Libraries ----
+# ---- Load Required Libraries ----
 library(arrow)
 library(Seurat)
 library(dplyr)
@@ -8,21 +8,21 @@ library(SingleR)
 library(celldex)
 library(SummarizedExperiment)
 library(tidyr)
+library(readr)
 
 
-# ---- Load Embeddings and Create Seurat Object ----
-# Load concatenated embeddings
-embeddings <- read_feather("concat_emb_mxbai_scgpt_hvg2.feather")
-
-# Convert embeddings to a matrix format suitable for Seurat
+# ---- Load Individual Embeddings and Create Seurat Object ----
+# Load individual embedding matrix (either scGPT or Mixedbread, comment out the embeddings you do not want to use)
+embeddings <- read_feather("cell_emb_HVG3000_768.feather")
+embeddings <- read_feather("embeddings_mxbai.feather")
 embeddings_matrix <- as.matrix(embeddings)
 
-# Load cell barcode information
+# Load cell barcodes and set rownames
 barcodes <- read.table("barcodes.tsv", header = FALSE, sep = "\t", stringsAsFactors = FALSE)
 rownames(embeddings_matrix) <- barcodes$V1
 embeddings_sparse <- as(embeddings_matrix, "dgCMatrix")
 
-# Create initial Seurat object from sparse matrix of embeddings
+# Create Seurat object with embeddings as counts (transpose to match format)
 seurat_obj <- CreateSeuratObject(counts = t(embeddings_sparse), project = "BreastCancer", assay = "RNA")
 rownames(embeddings_matrix) <- colnames(seurat_obj)
 colnames(embeddings_matrix) <- 1:ncol(embeddings_matrix)
@@ -30,31 +30,29 @@ seurat_obj[["embeddings"]] <- CreateDimReducObject(embeddings = embeddings_matri
 
 
 # ---- Perform Clustering using Louvain Algorithm ----
-options(future.globals.maxSize = 10 * 1024^3)  
+options(future.globals.maxSize = 10 * 1024^3)
+seurat_obj <- FindNeighbors(seurat_obj, reduction = "embeddings", dims = 1:768)
 
-# Find nearest neighbors using the embeddings
-seurat_obj <- FindNeighbors(seurat_obj, reduction = "embeddings", dims = 1:1536)
-
-# Cluster at multiple resolutions to determine the optimal resolution
+# Try a range of resolutions to determine the optimal resolution
 resolutions <- seq(0.005, 0.1, by = 0.005)
 for (res in resolutions) {
   seurat_obj <- FindClusters(seurat_obj, resolution = res)
-  print(paste("Resolution:", res, "Number of clusters:", length(unique(seurat_obj@meta.data$seurat_clusters))))
+  print(paste("Resolution:", res, "Number of clusters:", length(unique(seurat_obj$seurat_clusters))))
 }
 
-# Perform cclustering at the optimal resolution
-seurat_obj <- FindClusters(seurat_obj, resolution = 0.075)
+# Perform clustering at the optimal resolution
+seurat_obj <- FindClusters(seurat_obj, resolution = 0.070)
 
 
 # ---- Run UMAP and Visualize Clusters----
-seurat_obj <- RunUMAP(seurat_obj, reduction = "embeddings", dims = 1:1536)
+seurat_obj <- RunUMAP(seurat_obj, reduction = "embeddings", dims = 1:768)
 
 DimPlot(
   seurat_obj,
   reduction = "umap",
   label = TRUE,
   raster = FALSE
-) + ggtitle("UMAP of Clustering Results (Resolution = 0.075)") + 
+) + ggtitle("UMAP of Clustering Results (Resolution = 0.070)") + 
   theme(
     plot.title = element_text(size = 14, hjust = 0.5),
     legend.text = element_text(size = 12),
@@ -67,20 +65,20 @@ table(seurat_obj$seurat_clusters)
 
 
 # ---- Load Raw Matrix and Assign Clusters ----
-# Load raw count matrix
+# Load count matrix and corresponding gene/barcode info
 raw_matrix <- readMM("matrix.mtx")
 genes <- read.table("genes.tsv", header = FALSE, sep = "\t", stringsAsFactors = FALSE)
 barcodes <- read.table("barcodes.tsv", header = FALSE, sep = "\t", stringsAsFactors = FALSE)
 rownames(raw_matrix) <- genes$V1
 colnames(raw_matrix) <- barcodes$V1
 
-# Get cluster assignments
+
+# Create cluster assignment metadata
 cluster_assignments <- data.frame(Cell = colnames(seurat_obj), Cluster = Idents(seurat_obj))
+write.csv(cluster_assignments, "cluster_assignments_mxbai.csv", row.names = FALSE)
 
-# Create new Seurat object using raw counts
+# Create Seurat object from raw counts and add cluster info
 seurat_raw <- CreateSeuratObject(counts = raw_matrix)
-
-# Add cluster assignments to metadata
 rownames(cluster_assignments) <- cluster_assignments$Cell
 seurat_raw$seurat_clusters <- cluster_assignments[colnames(seurat_raw), "Cluster"]
 
@@ -94,12 +92,12 @@ seurat_raw <- FindVariableFeatures(seurat_raw)
 
 # Identify marker genes
 markers <- FindAllMarkers(seurat_raw, only.pos = TRUE, group.by = "seurat_clusters")
-write.csv(markers, "concat_04-18_22clusters_all_markers.csv", row.names = FALSE)
+write.csv(markers, "mxbai_06-16_21clusters_all_markers.csv", row.names = FALSE)
 
 
 # ---- Create Pseudo-Bulk Matrix and Annotate with SingleR ----
 # Load previously saved marker genes
-all_markers <- read.csv("concat_05-20_21clusters_all_markers.csv")
+all_markers <- read.csv("mxbai_06-16_21clusters_all_markers.csv")
 
 # Load reference dataset
 ref <- celldex::BlueprintEncodeData()
@@ -118,16 +116,15 @@ rownames(pseudo_bulk_mat) <- pseudo_bulk$gene
 singleR_result <- SingleR(test = pseudo_bulk_mat, ref = ref, labels = ref$label.main)
 table(singleR_result$labels)
 cluster_annotations <- data.frame(cluster = colnames(pseudo_bulk_mat), predicted_cell_type = singleR_result$labels)
-write.csv(cluster_annotations, "concat_04-18_22clusters_all_markers_pred_celltypes.csv", row.names = FALSE)
+write.csv(cluster_annotations, "mxbai_06-16_21clusters_all_markers_pred_celltypes.csv", row.names = FALSE)
 
 
 # ---- Summarize Predicted Cell Types ----
-predicted <- read.csv("concat_05-20_21clusters_all_markers_pred_celltypes.csv")
+predicted <- read.csv("mxbai_06-16_21clusters_all_markers_pred_celltypes.csv")
 cluster_sizes <- table(seurat_raw$seurat_clusters)
 predicted$cluster <- as.character(predicted$cluster)
 predicted$cluster_size <- cluster_sizes[predicted$cluster]
 
-# Summarize cell type predictions
 predicted_summary <- predicted %>%
   group_by(predicted_cell_type) %>%
   summarise(predicted_cells = sum(cluster_size)) %>%
@@ -135,15 +132,15 @@ predicted_summary <- predicted %>%
 print(predicted_summary)
 
 
-# ---- Add Annotations to Metadata and Run UMAP ----
+
+# ---- Add Annotations and Visualize by Cell Type ----
 seurat_raw$predicted_cell_type <- predicted$predicted_cell_type[match(seurat_raw$seurat_clusters, predicted$cluster)]
 seurat_raw[["embeddings"]] <- seurat_obj[["embeddings"]]
-seurat_raw <- RunUMAP(seurat_raw, reduction = "embeddings", dims = 1:1536)
+seurat_raw <- RunUMAP(seurat_raw, reduction = "embeddings", dims = 1:768)
 
-# ---- UMAP Visualization by Predicted Cell Types ----
 custom_colors <- c(
   "CD4+ T-cells"       = "#FFD700",  
-  "CD8+ T-cells"       = "#228B22",  
+  "CD8+ T-cells"       = "#228B22", 
   "Epithelial cells"   = "#cc77ab",
   "Fibroblasts"        = "#f2cf63",
   "Keratinocytes"      = "#936bd6",
@@ -153,7 +150,7 @@ custom_colors <- c(
   "Smooth muscle"      = "#018bb2",
   "Adipocytes"         = "#806e49",
   "B-cells"            = "#6c0297",
-  "Unassigned"         = "#00FFFF", 
+  "Unassigned"         = "#00FFFF",  
   "Astrocytes"         = "#800080"   
 )
 
@@ -161,15 +158,8 @@ DimPlot(
   seurat_raw,
   reduction = "umap",
   group.by = "predicted_cell_type",
+  #label = TRUE,
   cols = custom_colors,
   raster = FALSE
-) + ggtitle("UMAP of Predicted Cell Types from 21 Clusters") +
-  theme(
-    plot.title = element_text(size = 14, hjust = 0.5),
-    legend.text = element_text(size = 12),
-    axis.text = element_text(size = 12),
-    axis.title = element_text(size = 12)
-  )
-
-# ---- Cluster Frequency Table ----
-table(seurat_raw$predicted_cell_type, useNA = "ifany")
+) + ggtitle("UMAP of Predicted Cell Types from 10 Clusters") +
+  theme(plot.title = element_text(size = 14, hjust = 0.5))
