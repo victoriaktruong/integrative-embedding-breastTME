@@ -139,29 +139,27 @@ seurat_raw[["embeddings"]] <- seurat_obj[["embeddings"]]
 seurat_raw <- RunUMAP(seurat_raw, reduction = "embeddings", dims = 1:768)
 
 custom_colors <- c(
-  "CD4+ T-cells"       = "#ea7f5a", 
-  "CD8+ T-cells"       = "#5cbd4d",  
-  "Epithelial cells"   = "#cc77ab",  
-  "Fibroblasts"        = "#f2cf63", 
-  "Keratinocytes"      = "#936bd6",  
-  "Macrophages"        = "#ee9a34",  
-  "Monocytes"          = "#265734",  
-  "NK cells"           = "#9dbfd0",  
-  "Smooth muscle"      = "#018bb2",  
-  "Endothelial cells"  = "#806e49", 
+  "CD4+ T-cells"       = "#FFD700",  
+  "CD8+ T-cells"       = "#228B22", 
+  "Epithelial cells"   = "#cc77ab",
+  "Fibroblasts"        = "#f2cf63",
+  "Keratinocytes"      = "#936bd6",
+  "Macrophages"        = "#ee9a34",
+  "Monocytes"          = "#265734",
+  "NK cells"           = "#9dbfd0",
+  "Smooth muscle"      = "#018bb2",
+  "Adipocytes"         = "#806e49",
   "B-cells"            = "#6c0297",
-  "NA"                 = "#787878",
-  "Smooth muscle"      = "#591834")
-
+  "Unassigned"         = "#00FFFF",  
+  "Astrocytes"         = "#800080"   
+)
 
 DimPlot(
   seurat_raw,
   reduction = "umap",
   group.by = "predicted_cell_type",
-  label = TRUE,
+  #label = TRUE,
   cols = custom_colors,
   raster = FALSE
 ) + ggtitle("UMAP of Predicted Cell Types from 10 Clusters") +
   theme(plot.title = element_text(size = 14, hjust = 0.5))
-
-
