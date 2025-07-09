@@ -75,7 +75,7 @@ colnames(raw_matrix) <- barcodes$V1
 
 # Create cluster assignment metadata
 cluster_assignments <- data.frame(Cell = colnames(seurat_obj), Cluster = Idents(seurat_obj))
-write.csv(cluster_assignments, "cluster_assignments_scgpt.csv", row.names = FALSE)
+write.csv(cluster_assignments, "cluster_assignments_mxbai.csv", row.names = FALSE)
 
 # Create Seurat object from raw counts and add cluster info
 seurat_raw <- CreateSeuratObject(counts = raw_matrix)
@@ -92,12 +92,12 @@ seurat_raw <- FindVariableFeatures(seurat_raw)
 
 # Identify marker genes
 markers <- FindAllMarkers(seurat_raw, only.pos = TRUE, group.by = "seurat_clusters")
-write.csv(markers, "concat_04-18_22clusters_all_markers.csv", row.names = FALSE)
+write.csv(markers, "mxbai_06-16_21clusters_all_markers.csv", row.names = FALSE)
 
 
 # ---- Create Pseudo-Bulk Matrix and Annotate with SingleR ----
 # Load previously saved marker genes
-all_markers <- read.csv("concat_05-20_21clusters_all_markers.csv")
+all_markers <- read.csv("mxbai_06-16_21clusters_all_markers.csv")
 
 # Load reference dataset
 ref <- celldex::BlueprintEncodeData()
