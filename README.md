@@ -60,7 +60,7 @@ Additional files in this directory may include:
 
 ## Foundation Models Used
 - [scGPT](https://github.com/bowang-lab/scGPT)
-- [Mixedbread](https://huggingface.co/mxbai)
+- [Mixedbread](https://www.mixedbread.com/docs/inference/embedding)
 
 ---
 
